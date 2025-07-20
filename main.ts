@@ -1115,7 +1115,7 @@ class DatepickerSettingTab extends PluginSettingTab {
 
 		new Setting(settingsContainerElement)
 			.setName('Ignore dates in codeblocks')
-			.setDesc('When enabled, the datepicker will ignore dates inside markdown codeblocks (both inline code and fenced code blocks)')
+			.setDesc('When enabled, the datepicker will ignore dates inside markdown codeblocks (both inline code and fenced code blocks, Reloading Obsidian may be required)')
 			.addToggle((toggle) => toggle
 				.setValue(DatepickerPlugin.settings.ignoreCodeblocks)
 				.onChange(async (value) => {
