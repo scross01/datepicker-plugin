@@ -8,6 +8,7 @@ import {
 	Decoration,
 	DecorationSet
 } from "@codemirror/view";
+import { syntaxTree } from "@codemirror/language";
 import { platform } from 'os';
 
 interface DateMatch {
@@ -171,6 +172,32 @@ class DatepickerCMPlugin implements PluginValue {
 		return formats;
 	}
 
+	private isInCodeblock(view: EditorView, position: number): boolean {
+		// If the setting is disabled, never consider any position to be in a codeblock
+		if (!DatepickerPlugin.settings.ignoreCodeblocks) {
+			return false;
+		}
+		
+		const tree = syntaxTree(view.state);
+		let node: any = tree.resolve(position);
+		
+		// Traverse up the syntax tree to find if we're inside a codeblock
+		while (node) {
+			// Check for fenced code blocks (```) or inline code (`)
+			if (node.name === 'FencedCode' || 
+				node.name === 'CodeBlock' || 
+				node.name === 'InlineCode' ||
+				node.name === 'CodeText' ||
+				// Additional checks for different markdown parsers
+				node.name.includes('Code') ||
+				node.name.includes('code')) {
+				return true;
+			}
+			node = node.parent;
+		}
+		return false;
+	}
+
 
 	private getVisibleDates(view: EditorView): DateMatch[] {
 		let visibleText: VisibleText[] = [];
@@ -184,6 +211,10 @@ class DatepickerCMPlugin implements PluginValue {
 					while ((matchingDate = format.regex.exec(vt.text ?? "")) !== null) {
 						const matchingDateStart = matchingDate?.index! + vt.from;
 						const matchingDateEnd = matchingDate?.index! + matchingDate![0].length + vt.from;
+						
+						// Skip dates that are inside codeblocks
+						if (this.isInCodeblock(view, matchingDateStart)) continue;
+						
 						/*
 						 avoid pushing values that are part of another match to avoid recognizing values that are part of other values
 						 as their own date/time, eg: the time portion of a date/time is not seperate from the date portion, two dates on
@@ -206,6 +237,10 @@ class DatepickerCMPlugin implements PluginValue {
 			while ((matchingDate = format.regex.exec(noteText)) !== null) {
 				const matchingDateStart = matchingDate?.index!;
 				const matchingDateEnd = matchingDate?.index! + matchingDate![0].length;
+				
+				// Skip dates that are inside codeblocks
+				if (this.isInCodeblock(view, matchingDateStart)) continue;
+				
 				if (dateMatches.some((m) =>
 					matchingDateStart >= m.from && ((matchingDateEnd <= m.to) || (matchingDateStart <= m.to)))) continue;
 				dateMatches.push({ from: matchingDate.index, to: matchingDate.index + matchingDate[0].length, value: matchingDate[0], format: format });
@@ -449,6 +484,7 @@ interface DatepickerPluginSettings {
 	focusOnArrowDown: boolean;
 	insertIn24HourFormat: boolean;
 	selectDateText: boolean;
+	ignoreCodeblocks: boolean;
 }
 
 const DEFAULT_SETTINGS: DatepickerPluginSettings = {
@@ -462,7 +498,8 @@ const DEFAULT_SETTINGS: DatepickerPluginSettings = {
 	autofocus: false,
 	focusOnArrowDown: false,
 	insertIn24HourFormat: false,
-	selectDateText: false
+	selectDateText: false,
+	ignoreCodeblocks: false
 }
 
 export default class DatepickerPlugin extends Plugin {
@@ -1073,6 +1110,16 @@ class DatepickerSettingTab extends PluginSettingTab {
 				.setValue(DatepickerPlugin.settings.showTimeButtons)
 				.onChange(async (value) => {
 					DatepickerPlugin.settings.showTimeButtons = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(settingsContainerElement)
+			.setName('Ignore dates in codeblocks')
+			.setDesc('When enabled, the datepicker will ignore dates inside markdown codeblocks (both inline code and fenced code blocks, Reloading Obsidian may be required)')
+			.addToggle((toggle) => toggle
+				.setValue(DatepickerPlugin.settings.ignoreCodeblocks)
+				.onChange(async (value) => {
+					DatepickerPlugin.settings.ignoreCodeblocks = value;
 					await this.plugin.saveSettings();
 				}));
 
